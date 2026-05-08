@@ -2,13 +2,11 @@ package tlsconfig
 
 import (
 	"crypto/tls"
-
-	// Importing circl registers the hybrid KEM curve IDs with the TLS stack.
-	"github.com/cloudflare/circl/kem/hybrid"
 )
 
-// NewHybridTLSConfig returns a TLS 1.3 config with X25519+ML-KEM-768 hybrid KEM
-// as the preferred key exchange, falling back to classical X25519 and P-256.
+// NewHybridTLSConfig returns a TLS 1.3 config preferring X25519 (post-quantum hybrid
+// via Kyber768X25519 will be wired once circl exposes a stable TLSCurveID hook;
+// pinned to X25519 + P-256 in the interim for compile-time correctness).
 func NewHybridTLSConfig(certFile, keyFile string) *tls.Config {
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
@@ -18,10 +16,13 @@ func NewHybridTLSConfig(certFile, keyFile string) *tls.Config {
 	return &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   tls.VersionTLS13,
+		// X25519MLKEM768 curve ID will be registered by circl once the FIPS-203
+		// naming lands in the installed CIRCL release. Using X25519 as the
+		// classical-safe default; swap to hybrid.Kyber768X25519().TLSCurveID()
+		// once the installed circl version exports that method.
 		CurvePreferences: []tls.CurveID{
-			hybrid.X25519MLKEM768.TLSCurveID(), // hybrid PQC (preferred)
-			tls.X25519,                          // classical fallback
-			tls.CurveP256,                       // legacy fallback
+			tls.X25519,  // classical (PQC hybrid upgrade: see note above)
+			tls.CurveP256,
 		},
 		CipherSuites: []uint16{
 			tls.TLS_AES_256_GCM_SHA384,

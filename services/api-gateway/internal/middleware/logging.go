@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -15,10 +16,8 @@ func RequestID() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			id := uuid.New().String()
 			w.Header().Set("X-Request-ID", id)
-			ctx := r.Context()
-			// Store in context for downstream use
-			r = r.WithContext(context_withValue(ctx, requestIDKey{}, id))
-			next.ServeHTTP(w, r)
+			ctx := context.WithValue(r.Context(), requestIDKey{}, id)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
@@ -51,8 +50,3 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-// shim to avoid importing "context" twice
-func context_withValue(ctx interface{ Value(any) any }, key, val any) interface{ Value(any) any } {
-	// Use standard context package at call sites
-	return ctx
-}
