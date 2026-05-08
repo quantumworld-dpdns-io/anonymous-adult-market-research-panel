@@ -1,4 +1,9 @@
+
 # Anonymous Adult Market Research Panel
+
+<img width="1189" height="851" alt="Screenshot 2026-05-08 at 11 49 33 PM" src="https://github.com/user-attachments/assets/3bcbc011-3e5a-4598-8aeb-836903581c39" />
+
+---
 
 > **Verified adults participate in market research studies via ZK age proofs and anonymous credentials — no PII stored, no identity linkage.**
 
