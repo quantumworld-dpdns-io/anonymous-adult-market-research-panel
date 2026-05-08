@@ -1,4 +1,5 @@
 mod utils;
+mod tests;
 
 use ::std::hash::pedersen_hash;
 use utils::{validate_birth_date, validate_current_date};
