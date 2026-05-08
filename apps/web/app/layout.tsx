@@ -1,5 +1,18 @@
 import type { Metadata } from 'next';
+import { Crimson_Pro, Inter } from 'next/font/google';
 import './globals.css';
+
+const fontSans = Inter({
+  subsets: ['latin'],
+  variable: '--font-sans',
+  display: 'swap',
+});
+
+const fontDisplay = Crimson_Pro({
+  subsets: ['latin'],
+  variable: '--font-display',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'Anonymous Panel | Market Research',
@@ -13,7 +26,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-white font-sans antialiased">
+      <body
+        className={`${fontSans.variable} ${fontDisplay.variable} min-h-screen bg-[var(--paper)] font-sans antialiased text-[var(--ink)]`}
+      >
         {children}
       </body>
     </html>
