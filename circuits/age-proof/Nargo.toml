@@ -1,8 +1,8 @@
 [package]
-name = "age-proof"
+name = "age_proof"
 type = "bin"
 authors = ["quantumworld-dpdns-io"]
-compiler_version = ">=1.0.0-beta.20"
+compiler_version = ">=0.31.0"
 
 [dependencies]
 # No external deps; uses std only

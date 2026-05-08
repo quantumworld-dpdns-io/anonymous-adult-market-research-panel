@@ -31,6 +31,8 @@ struct CredentialRequest {
     age_proof_valid: bool,
     study_attributes: StudyAttrs,
     blinding_factor: [u8; 32],
+    /// Timestamp supplied by host (Unix seconds). Committed to journal.
+    issued_at: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -88,9 +90,8 @@ pub fn main() {
         arr
     };
 
-    // 6. issued_at: host supplies via env cycle count as a timestamp proxy.
-    //    In production, host passes the timestamp in the CredentialRequest.
-    let issued_at = 0i64; // Placeholder; wire up via host env in production
+    // 6. issued_at: passed directly from host into CredentialRequest.
+    let issued_at: i64 = req.issued_at;
 
     // 7. Commit public journal (visible to verifier)
     env::commit(&CredentialJournal {

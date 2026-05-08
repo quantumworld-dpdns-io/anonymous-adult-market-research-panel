@@ -69,6 +69,7 @@ pub async fn handler(
         age_proof_valid: true, // Host verified above; guest enforces via assert!
         study_attributes: req.study_attributes,
         blinding_factor,
+        issued_at: chrono::Utc::now().timestamp(),
     };
 
     let (journal, receipt) = state.credential_issuer.issue(credential_req).await?;
