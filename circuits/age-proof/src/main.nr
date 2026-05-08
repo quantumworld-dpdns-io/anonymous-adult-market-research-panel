@@ -1,14 +1,16 @@
-use dep::std::hash::pedersen_hash;
-use crate::utils::{validate_birth_date, validate_current_date};
+mod utils;
+
+use ::std::hash::pedersen_hash;
+use utils::{validate_birth_date, validate_current_date};
 
 // Private inputs (never revealed to verifier):
-//   birth_year, birth_month, birth_day  — participant's date of birth
-//   blinding_factor                     — random scalar for nullifier binding
+//   birth_year, birth_month, birth_day  - participant's date of birth
+//   blinding_factor                     - random scalar for nullifier binding
 //
 // Public inputs (visible to verifier):
-//   current_year, current_month, current_day — today's date (server-signed attestation)
-//   study_id                                  — binds nullifier to a specific study
-//   nullifier                                 — H(birth_date || blinding_factor || study_id)
+//   current_year, current_month, current_day - today's date (server-signed attestation)
+//   study_id                                 - binds nullifier to a specific study
+//   nullifier                                - H(birth_date || blinding_factor || study_id)
 
 fn main(
     // Private
@@ -38,8 +40,6 @@ fn main(
 
     // 4. Verify nullifier = Pedersen(birth_year || birth_month || birth_day
     //                                || blinding_factor || study_id)
-    //    This binds the nullifier to the participant's birth date and the study,
-    //    preventing cross-study replay without revealing the birth date.
     let expected_nullifier = pedersen_hash([
         birth_year as Field,
         birth_month as Field,
@@ -51,14 +51,13 @@ fn main(
 }
 
 // Compute age in full years, accounting for month and day.
-// Returns 0 if birth date is after current date (constraint violation expected upstream).
 pub fn compute_age(
     by: u32, bm: u32, bd: u32,
     cy: u32, cm: u32, cd: u32,
 ) -> u32 {
     let mut age = cy - by;
 
-    // Subtract one year if the birthday hasn't occurred yet this calendar year
+    // Subtract one year if the birthday has not occurred yet this calendar year
     if cm < bm {
         age = age - 1;
     } else if (cm == bm) & (cd < bd) {

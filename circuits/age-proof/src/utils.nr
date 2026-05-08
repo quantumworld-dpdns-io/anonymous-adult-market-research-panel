@@ -1,14 +1,14 @@
 // Date validation helpers for the age-proof circuit.
-// All assertions here are constraints — a failing assert makes the proof invalid.
+// All assertions here are constraints -- a failing assert makes the proof invalid.
 
 // Days per month lookup (non-leap-year conservative; day <= 31 covers all months)
 // We use a simple upper bound; finer validation would increase gate count significantly.
 pub fn validate_birth_date(year: u32, month: u32, day: u32, current_year: u32) {
-    // Month must be 1–12
+    // Month must be 1-12
     assert(month >= 1);
     assert(month <= 12);
 
-    // Day must be 1–31 (conservative upper bound; exact day-per-month adds ~3k gates)
+    // Day must be 1-31 (conservative upper bound)
     assert(day >= 1);
     assert(day <= 31);
 

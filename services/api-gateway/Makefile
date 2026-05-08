@@ -1,12 +1,15 @@
 .PHONY: proto build test lint docker run
 
+export PATH := $(PATH):$(HOME)/go/bin
+
 PROTO_DIR := proto/zkproving/v1
 GO_OUT    := proto/zkproving/v1
 
 proto:
 	protoc \
-		--go_out=$(GO_OUT) --go_opt=paths=source_relative \
-		--go-grpc_out=$(GO_OUT) --go-grpc_opt=paths=source_relative \
+		--proto_path=. \
+		--go_out=. --go_opt=paths=source_relative \
+		--go-grpc_out=. --go-grpc_opt=paths=source_relative \
 		$(PROTO_DIR)/service.proto
 
 build:
