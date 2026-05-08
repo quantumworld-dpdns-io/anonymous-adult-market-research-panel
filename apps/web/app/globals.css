@@ -1,11 +1,33 @@
+@config "../tailwind.config.ts";
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Mozart-museum-inspired palette: warm paper + deep ink + red accents */
+  --paper: #fbf3d0;
+  --paper-2: #fff7dd;
+  --ink: #17130f;
+  --muted: rgba(23, 19, 15, 0.65);
+  --line: rgba(23, 19, 15, 0.16);
+  --accent: #b91c1c; /* museum red */
+  --accent-2: #f59e0b; /* golden highlight */
+  --shadow: 0 10px 30px rgba(23, 19, 15, 0.12);
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
+  color: var(--ink);
+  background: var(--paper);
+}
+
+/* Subtle “paper grain” and soft vignette */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(1200px 700px at 20% 10%, rgba(245, 158, 11, 0.14), transparent 55%),
+    radial-gradient(900px 600px at 85% 20%, rgba(185, 28, 28, 0.10), transparent 52%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0));
+  mix-blend-mode: multiply;
+  opacity: 0.9;
 }
