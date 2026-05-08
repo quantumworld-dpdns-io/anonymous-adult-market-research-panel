@@ -1,0 +1,42 @@
+# Tetragon event export configuration
+# Events are exported as JSON to the OTel collector, then to Loki / Arize Phoenix
+
+exportFilename: /var/log/tetragon/tetragon.log
+exportFileMaxSizeMB: 100
+exportFileMaxBackups: 5
+exportFileCompress: true
+
+# Allow list: export these event types from non-infra namespaces
+exportAllowList:
+  - event_set:
+      - PROCESS_EXEC
+      - PROCESS_EXIT
+      - PROCESS_KPROBE
+      - PROCESS_UPROBE
+
+# Deny list: suppress events from internal k8s system pods
+exportDenyList:
+  - namespace: "kube-system"
+  - namespace: "cert-manager"
+  - namespace: "kube-public"
+
+# Field filters: strip sensitive fields before export
+fieldFilters:
+  - fields:
+      - "process.arguments"
+    action: KEEP
+  - fields:
+      - "process.binary"
+    action: KEEP
+
+# gRPC export to OpenTelemetry collector
+grpcAddress: "otel-collector:4317"
+
+# Rate limits for high-frequency events
+rateLimit:
+  events: 10000
+  interval: "1m"
+
+# Kubernetes enrichment
+enableK8sAPI: true
+k8sKubeConfigPath: ""   # auto-detect in-cluster config

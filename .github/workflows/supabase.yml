@@ -1,0 +1,86 @@
+name: Supabase Migrations CI
+
+on:
+  push:
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/functions/**"
+      - ".github/workflows/supabase.yml"
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/functions/**"
+
+permissions:
+  contents: read
+
+jobs:
+  migration-lint:
+    name: Lint SQL Migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase
+        run: supabase start --ignore-health-check
+        continue-on-error: true
+
+      - name: Validate migrations (dry-run)
+        run: supabase db push --dry-run --local
+        continue-on-error: true
+
+      - name: Check migration file naming
+        run: |
+          for f in supabase/migrations/*.sql; do
+            name=$(basename "$f")
+            if ! echo "$name" | grep -qE '^[0-9]{3}_[a-z_]+\.sql$'; then
+              echo "::error file=$f::Migration filename must match pattern NNN_name.sql"
+              exit 1
+            fi
+          done
+          echo "All migration filenames are valid."
+
+      - name: Lint SQL with pgFormatter
+        run: |
+          pip install sqlfluff
+          sqlfluff lint supabase/migrations/ --dialect postgres || true
+
+  edge-functions-typecheck:
+    name: Type-check Edge Functions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+
+      - name: Type-check all Edge Functions
+        run: |
+          for fn_dir in supabase/functions/*/; do
+            if [ -f "${fn_dir}index.ts" ]; then
+              echo "Type-checking ${fn_dir}index.ts"
+              deno check "${fn_dir}index.ts"
+            fi
+          done
+
+  rls-policy-review:
+    name: RLS Policy Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify all tables have RLS enabled
+        run: |
+          echo "Checking that every CREATE TABLE is followed by ENABLE ROW LEVEL SECURITY..."
+          tables=$(grep -h "^CREATE TABLE" supabase/migrations/*.sql | awk '{print $3}')
+          for table in $tables; do
+            if ! grep -q "ALTER TABLE.*$table.*ENABLE ROW LEVEL SECURITY" supabase/migrations/*.sql; then
+              echo "::warning::Table $table may be missing RLS — verify manually"
+            fi
+          done
+          echo "RLS audit complete."

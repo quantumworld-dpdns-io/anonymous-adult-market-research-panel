@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package zkproving.v1;
+
+option go_package = "github.com/quantumworld/panel/api-gateway/proto/zkproving/v1;zkprovingv1";
+
+service ZKProvingService {
+    rpc VerifyAge (VerifyAgeRequest) returns (VerifyAgeResponse);
+    rpc IssueCredential (IssueCredentialRequest) returns (IssueCredentialResponse);
+    rpc GetDateAttestation (DateAttestationRequest) returns (DateAttestationResponse);
+}
+
+message VerifyAgeRequest {
+    bytes proof = 1;
+    repeated string public_inputs = 2;
+    string nullifier = 3;
+    string study_id = 4;
+    DateAttestation date_attestation = 5;
+}
+
+message VerifyAgeResponse {
+    string zk_session_token = 1;
+}
+
+message IssueCredentialRequest {
+    bytes age_proof = 1;
+    repeated string age_public_inputs = 2;
+    string nullifier = 3;
+    string study_id = 4;
+    bytes blinding_factor = 5;
+    StudyAttributes attributes = 6;
+    DateAttestation date_attestation = 7;
+}
+
+message IssueCredentialResponse {
+    string zk_session_token = 1;
+    string credential_commitment = 2;
+    string receipt_seal = 3;
+}
+
+message DateAttestationRequest {
+    string study_id = 1;
+}
+
+message DateAttestationResponse {
+    DateAttestation attestation = 1;
+    bytes public_key = 2;
+}
+
+message DateAttestation {
+    uint32 year = 1;
+    uint32 month = 2;
+    uint32 day = 3;
+    int64 signed_at = 4;
+    bytes signature = 5;
+    string study_id = 6;
+}
+
+message StudyAttributes {
+    string age_range = 1;
+    string country_bucket = 2;
+    repeated string interests = 3;
+}

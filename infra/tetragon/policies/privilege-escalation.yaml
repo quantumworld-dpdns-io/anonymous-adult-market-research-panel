@@ -1,0 +1,65 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: detect-privilege-escalation
+  namespace: default
+  annotations:
+    description: "Detect and kill any setuid-to-root or capability escalation attempt"
+spec:
+  kprobes:
+    # Detect setuid to root
+    - call: "security_task_fix_setuid"
+      syscall: false
+      return: true
+      args:
+        - index: 0
+          type: "int"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Equal"
+              values:
+                - "0"
+          matchNamespaces:
+            - namespace: default
+          matchActions:
+            - action: Sigkill
+    # Detect setresuid / setreuid calls targeting UID 0
+    - call: "sys_setresuid"
+      syscall: true
+      args:
+        - index: 0
+          type: "int"
+        - index: 1
+          type: "int"
+        - index: 2
+          type: "int"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Equal"
+              values:
+                - "0"
+          matchNamespaces:
+            - namespace: default
+          matchActions:
+            - action: Sigkill
+    # Detect SUID binary execution
+    - call: "sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "In"
+              values:
+                - "/usr/bin/sudo"
+                - "/bin/su"
+                - "/usr/bin/su"
+                - "/usr/bin/pkexec"
+          matchNamespaces:
+            - namespace: default
+          matchActions:
+            - action: Sigkill

@@ -1,0 +1,96 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/quantumworld-dpdns-io/panel-analytics
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8001
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+
+# Flower federation configuration
+flower:
+  superlink:
+    enabled: true
+    image: flwr/superlink:1.12.0
+    port: 9091
+    driverPort: 9090
+    tls:
+      enabled: true
+      certSecret: flower-superlink-tls
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+
+  supernodes:
+    replicaCount: 3
+    image: flwr/supernode:1.12.0
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "2Gi"
+      limits:
+        cpu: "2000m"
+        memory: "4Gi"
+
+# Differential privacy defaults (overridable per study via API)
+privacy:
+  defaultEpsilonBudget: 10.0
+  defaultDelta: 0.00001
+  defaultEpsilonPerRound: 1.0
+  minCohortSize: 50
+
+# DuckDB persistence
+persistence:
+  enabled: true
+  storageClass: "standard"
+  size: "10Gi"
+  mountPath: /data
+
+env:
+  PORT: "8001"
+  OTEL_SERVICE_NAME: "analytics"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+
+envFromSecrets:
+  - secretName: analytics-secrets
+    keys:
+      - SUPABASE_SERVICE_KEY
+      - SERVICE_HMAC_SECRET
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8001
+  initialDelaySeconds: 15
+  periodSeconds: 20
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8001
+  initialDelaySeconds: 10
+  periodSeconds: 10

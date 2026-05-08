@@ -1,0 +1,116 @@
+---
+# Internal CA for mTLS between microservices
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: panel-internal-ca
+spec:
+  ca:
+    secretName: panel-internal-ca-key-pair
+
+---
+# Root CA certificate (bootstrap manually once; then cert-manager manages the rest)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: panel-internal-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: panel-internal-ca
+  secretName: panel-internal-ca-key-pair
+  duration: 87600h  # 10 years for CA
+  renewBefore: 720h
+  privateKey:
+    algorithm: ECDSA
+    size: 384
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}
+
+---
+# ZK Proving Service server certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: zk-proving-server-cert
+  namespace: default
+spec:
+  secretName: zk-proving-tls
+  issuerRef:
+    name: panel-internal-ca
+    kind: ClusterIssuer
+  commonName: zk-proving.default.svc.cluster.local
+  dnsNames:
+    - zk-proving
+    - zk-proving.default
+    - zk-proving.default.svc
+    - zk-proving.default.svc.cluster.local
+  duration: 720h      # 30 days
+  renewBefore: 168h   # Renew 7 days before expiry
+  privateKey:
+    algorithm: ECDSA
+    size: 384
+  usages:
+    - server auth
+    - client auth
+
+---
+# API Gateway client certificate (for mTLS to zk-proving)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: api-gateway-client-cert
+  namespace: default
+spec:
+  secretName: api-gateway-client-tls
+  issuerRef:
+    name: panel-internal-ca
+    kind: ClusterIssuer
+  commonName: api-gateway.default.svc.cluster.local
+  dnsNames:
+    - api-gateway
+    - api-gateway.default.svc.cluster.local
+  duration: 720h
+  renewBefore: 168h
+  privateKey:
+    algorithm: ECDSA
+    size: 384
+  usages:
+    - client auth
+
+---
+# Analytics Service server certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: analytics-server-cert
+  namespace: default
+spec:
+  secretName: analytics-tls
+  issuerRef:
+    name: panel-internal-ca
+    kind: ClusterIssuer
+  commonName: analytics.default.svc.cluster.local
+  dnsNames:
+    - analytics
+    - analytics.default.svc.cluster.local
+    - analytics-superlink
+    - analytics-superlink.default.svc.cluster.local
+  duration: 720h
+  renewBefore: 168h
+  privateKey:
+    algorithm: ECDSA
+    size: 384
+  usages:
+    - server auth
+    - client auth

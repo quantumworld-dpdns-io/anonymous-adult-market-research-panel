@@ -1,0 +1,334 @@
+version: "3.9"
+
+# Anonymous Adult Market Research Panel — Local Dev Stack
+# Usage: cp .env.example .env.local && docker compose --env-file .env.local up -d
+
+networks:
+  panel-net:
+    driver: bridge
+
+volumes:
+  supabase-db-data:
+  redis-data:
+  qdrant-data:
+  storage-data:
+
+services:
+  # ─────────────────────────────────────────────
+  # Supabase local stack
+  # ─────────────────────────────────────────────
+  supabase-db:
+    image: supabase/postgres:15.6.1.143
+    container_name: panel-supabase-db
+    networks: [panel-net]
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: ${SUPABASE_DB_PASSWORD:-supersecret}
+      POSTGRES_DB: postgres
+    volumes:
+      - supabase-db-data:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  supabase-auth:
+    image: supabase/gotrue:v2.158.1
+    container_name: panel-supabase-auth
+    networks: [panel-net]
+    restart: unless-stopped
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL:-http://localhost:8000}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${SUPABASE_DB_PASSWORD:-supersecret}@supabase-db:5432/postgres
+      GOTRUE_SITE_URL: ${SITE_URL:-http://localhost:3000}
+      GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS:-}
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+    ports:
+      - "9999:9999"
+
+  supabase-rest:
+    image: postgrest/postgrest:v12.2.0
+    container_name: panel-supabase-rest
+    networks: [panel-net]
+    restart: unless-stopped
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${SUPABASE_DB_PASSWORD:-supersecret}@supabase-db:5432/postgres
+      PGRST_DB_SCHEMAS: public,storage,graphql_public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters}
+      PGRST_APP_SETTINGS_JWT_EXP: 3600
+    ports:
+      - "3001:3000"
+
+  supabase-storage:
+    image: supabase/storage-api:v1.11.13
+    container_name: panel-supabase-storage
+    networks: [panel-net]
+    restart: unless-stopped
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    environment:
+      ANON_KEY: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder}
+      SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder}
+      PROJECT_REF: local
+      REGION: local
+      GLOBAL_S3_BUCKET: local
+      POSTGREST_URL: http://supabase-rest:3000
+      PGRST_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters}
+      DATABASE_URL: postgres://supabase_storage_admin:${SUPABASE_DB_PASSWORD:-supersecret}@supabase-db:5432/postgres
+      FILE_SIZE_LIMIT: 52428800
+      STORAGE_BACKEND: file
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      IS_MULTITENANT: "false"
+      TENANT_ID: stub
+      IMGPROXY_URL: http://imgproxy:8080
+    volumes:
+      - storage-data:/var/lib/storage
+    ports:
+      - "5000:5000"
+
+  supabase-kong:
+    image: kong:2.8.1
+    container_name: panel-supabase-kong
+    networks: [panel-net]
+    restart: unless-stopped
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: "64 160k"
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder}
+
+  supabase-studio:
+    image: supabase/studio:20250113-83c9420
+    container_name: panel-supabase-studio
+    networks: [panel-net]
+    restart: unless-stopped
+    ports:
+      - "3002:3000"
+    environment:
+      STUDIO_PG_META_URL: http://supabase-meta:8080
+      POSTGRES_PASSWORD: ${SUPABASE_DB_PASSWORD:-supersecret}
+      DEFAULT_ORGANIZATION_NAME: panel-local
+      DEFAULT_PROJECT_NAME: anonymous-panel
+      SUPABASE_URL: http://supabase-kong:8000
+      SUPABASE_PUBLIC_URL: ${API_EXTERNAL_URL:-http://localhost:8000}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder}
+
+  supabase-meta:
+    image: supabase/postgres-meta:v0.84.2
+    container_name: panel-supabase-meta
+    networks: [panel-net]
+    restart: unless-stopped
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: supabase-db
+      PG_META_DB_PORT: 5432
+      PG_META_DB_NAME: postgres
+      PG_META_DB_USER: supabase
+      PG_META_DB_PASSWORD: ${SUPABASE_DB_PASSWORD:-supersecret}
+
+  # ─────────────────────────────────────────────
+  # Redis (DragonflyDB — Redis-compatible, high-throughput)
+  # ─────────────────────────────────────────────
+  redis:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    container_name: panel-redis
+    networks: [panel-net]
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: >
+      --requirepass ${REDIS_PASSWORD:-devredispassword}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-devredispassword}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # Qdrant — vector database for survey embeddings
+  # ─────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.13.4
+    container_name: panel-qdrant
+    networks: [panel-net]
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # Application microservices
+  # ─────────────────────────────────────────────
+  api-gateway:
+    build:
+      context: ../services/api-gateway
+      dockerfile: Dockerfile
+    container_name: panel-api-gateway
+    networks: [panel-net]
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      supabase-db:
+        condition: service_healthy
+    ports:
+      - "8081:8080"
+    environment:
+      LISTEN_ADDR: ":8080"
+      ZK_PROVING_ADDR: "zk-proving:50051"
+      ANALYTICS_ADDR: "http://analytics:8001"
+      QUANTUM_ADDR: "http://quantum:8002"
+      SUPABASE_URL: ${SUPABASE_URL:-http://supabase-kong:8000}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters}
+      ZK_TOKEN_SECRET: ${ZK_TOKEN_SECRET}
+      SERVICE_HMAC_SECRET: ${SERVICE_HMAC_SECRET}
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-devredispassword}@redis:6379/0"
+      ALLOWED_ORIGINS: "http://localhost:3000"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zk-proving:
+    build:
+      context: ../services/zk-proving
+      dockerfile: Dockerfile
+    container_name: panel-zk-proving
+    networks: [panel-net]
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "50051:50051"
+      - "8082:8080"
+    environment:
+      LISTEN_ADDR: ":8080"
+      GRPC_ADDR: ":50051"
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-devredispassword}@redis:6379/1"
+      SUPABASE_URL: ${SUPABASE_URL:-http://supabase-kong:8000}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      ZK_TOKEN_SECRET: ${ZK_TOKEN_SECRET}
+      ML_DSA_SIGNING_KEY_FILE: /run/secrets/ml_dsa_key
+      RISC0_DEV_MODE: ${RISC0_DEV_MODE:-0}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  analytics:
+    build:
+      context: ../services/analytics
+      dockerfile: Dockerfile
+    container_name: panel-analytics
+    networks: [panel-net]
+    restart: unless-stopped
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    ports:
+      - "8001:8001"
+    environment:
+      PORT: "8001"
+      SUPABASE_URL: ${SUPABASE_URL:-http://supabase-kong:8000}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SERVICE_HMAC_SECRET: ${SERVICE_HMAC_SECRET}
+      DUCKDB_PATH: /data/analytics.duckdb
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+    volumes:
+      - ./data/analytics:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  quantum:
+    build:
+      context: ../services/quantum
+      dockerfile: Dockerfile
+    container_name: panel-quantum
+    networks: [panel-net]
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      PORT: "8002"
+      IBM_QUANTUM_API_KEY: ${IBM_QUANTUM_API_KEY:-}
+      ENABLE_CUDAQ_BACKEND: "false"
+      NODE_ENV: ${NODE_ENV:-development}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8002/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # Observability
+  # ─────────────────────────────────────────────
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: panel-otel
+    networks: [panel-net]
+    restart: unless-stopped
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel/config.yaml:/etc/otelcol/config.yaml:ro

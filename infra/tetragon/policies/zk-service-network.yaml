@@ -1,0 +1,39 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: zk-service-outbound-network
+  namespace: default
+  annotations:
+    description: "Monitor unexpected TCP connections from the zk-proving pod"
+spec:
+  kprobes:
+    - call: "tcp_connect"
+      syscall: false
+      args:
+        - index: 0
+          type: "sock"
+      selectors:
+        # Log all outbound connections from zk-proving (audit)
+        - matchPods:
+            - operator: In
+              values:
+                - "zk-proving"
+          matchActions:
+            - action: Post
+              rateLimit: "30/minute"
+        # Alert on connections to unexpected destination ports
+        - matchPods:
+            - operator: In
+              values:
+                - "zk-proving"
+          matchArgs:
+            - index: 0
+              operator: "NotIn"
+              values:
+                - "6379"    # Redis
+                - "5432"    # Supabase Postgres
+                - "8000"    # Supabase Kong
+                - "50051"   # gRPC self
+          matchActions:
+            - action: Post
+              rateLimit: "5/minute"
