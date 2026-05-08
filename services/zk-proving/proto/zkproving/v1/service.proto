@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package zkproving.v1;
+
+option go_package = "github.com/quantumworld/panel/proto/zkproving/v1;zkprovingv1";
+
+service ZkProvingService {
+    rpc VerifyAge (VerifyAgeRequest) returns (VerifyAgeResponse);
+    rpc GetDateAttestation (DateAttestationRequest) returns (DateAttestationResponse);
+}
+
+message VerifyAgeRequest {
+    bytes proof = 1;
+    repeated string public_inputs = 2;
+    string nullifier = 3;
+    string study_id = 4;
+    // JSON-serialized DateAttestation (avoids nested proto for flexibility)
+    bytes date_attestation_json = 5;
+}
+
+message VerifyAgeResponse {
+    string zk_session_token = 1;
+}
+
+message DateAttestationRequest {
+    string study_id = 1;
+}
+
+message DateAttestationResponse {
+    // JSON-serialized DateAttestation struct
+    bytes attestation_json = 1;
+}

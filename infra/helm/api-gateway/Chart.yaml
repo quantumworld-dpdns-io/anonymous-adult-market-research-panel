@@ -1,0 +1,12 @@
+apiVersion: v2
+name: api-gateway
+description: Anonymous Panel API Gateway — Go/Chi with PQC TLS
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - api-gateway
+  - pqc
+  - ml-kem
+maintainers:
+  - name: quantumworld-dpdns-io

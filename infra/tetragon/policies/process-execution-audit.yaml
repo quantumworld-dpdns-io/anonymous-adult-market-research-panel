@@ -1,0 +1,40 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: process-execution-audit
+  namespace: default
+  annotations:
+    description: "Audit trail: log all process executions with binary path and arguments"
+spec:
+  kprobes:
+    - call: "sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"
+        - index: 1
+          type: "string_array"
+      selectors:
+        - matchNamespaces:
+            - namespace: default
+          matchActions:
+            - action: Post
+              rateLimit: "200/second"
+    # Also capture executions from /tmp, /dev/shm (fileless execution indicators)
+    - call: "sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Prefix"
+              values:
+                - "/tmp/"
+                - "/dev/shm/"
+                - "/var/tmp/"
+          matchNamespaces:
+            - namespace: default
+          matchActions:
+            - action: Sigkill

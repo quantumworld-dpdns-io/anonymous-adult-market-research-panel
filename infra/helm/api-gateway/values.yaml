@@ -1,0 +1,116 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/quantumworld-dpdns-io/panel-api-gateway
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+  grpcPort: 9090
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+  hosts:
+    - host: api.panel.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: api-gateway-tls
+      hosts:
+        - api.panel.example.com
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: "256Mi"
+  limits:
+    cpu: "1000m"
+    memory: "512Mi"
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+# Crypto-agility: all cipher preferences are config-driven
+crypto:
+  tls:
+    minVersion: "TLS13"
+    kemPreferences:
+      - "X25519MLKEM768"
+      - "X25519"
+    cipherSuites:
+      - "TLS_AES_256_GCM_SHA384"
+      - "TLS_CHACHA20_POLY1305_SHA256"
+  signatures:
+    dateAttestation: "ML-DSA-65"
+  keyWrapping:
+    algorithm: "ML-KEM-1024"
+
+env:
+  LISTEN_ADDR: ":8080"
+  ALLOWED_ORIGINS: "https://panel.example.com"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+  OTEL_SERVICE_NAME: "api-gateway"
+
+envFromSecrets:
+  - secretName: api-gateway-secrets
+    keys:
+      - SUPABASE_SERVICE_KEY
+      - ZK_TOKEN_SECRET
+      - SERVICE_HMAC_SECRET
+      - REDIS_URL
+
+downstream:
+  zkProvingAddr: "zk-proving:50051"
+  analyticsAddr: "http://analytics:8001"
+  quantumAddr: "http://quantum:8002"
+
+rateLimit:
+  public:
+    requests: 20
+    windowSeconds: 60
+  participant:
+    requests: 5
+    windowSeconds: 60
+  researcher:
+    requests: 60
+    windowSeconds: 60
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 15
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10

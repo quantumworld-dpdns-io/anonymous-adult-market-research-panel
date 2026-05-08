@@ -1,0 +1,39 @@
+spin_manifest_version = 2
+
+[application]
+name = "panel-edge-handlers"
+version = "0.1.0"
+description = "Lightweight WASM edge handlers for the anonymous panel platform"
+authors = ["quantumworld-dpdns-io"]
+
+[[trigger.http]]
+route = "/health"
+component = "health-handler"
+
+[[trigger.http]]
+route = "/edge/proof-ping"
+component = "proof-ping-handler"
+
+[[trigger.http]]
+route = "/edge/cors-preflight"
+component = "cors-handler"
+
+[component.health-handler]
+source = "target/wasm32-wasip1/release/health_handler.wasm"
+description = "Health check endpoint for load balancer probes"
+[component.health-handler.build]
+command = "cargo build --release --target wasm32-wasip1 -p health-handler"
+
+[component.proof-ping-handler]
+source = "target/wasm32-wasip1/release/proof_ping_handler.wasm"
+description = "Lightweight proof submission acknowledgement at edge"
+allowed_outbound_hosts = []
+[component.proof-ping-handler.build]
+command = "cargo build --release --target wasm32-wasip1 -p proof-ping-handler"
+
+[component.cors-handler]
+source = "target/wasm32-wasip1/release/cors_handler.wasm"
+description = "CORS preflight handler"
+allowed_outbound_hosts = []
+[component.cors-handler.build]
+command = "cargo build --release --target wasm32-wasip1 -p cors-handler"

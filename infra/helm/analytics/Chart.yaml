@@ -1,0 +1,12 @@
+apiVersion: v2
+name: analytics
+description: Anonymous Panel Analytics Service with Flower Federated Learning
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - federated-learning
+  - flower
+  - differential-privacy
+maintainers:
+  - name: quantumworld-dpdns-io

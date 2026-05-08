@@ -1,0 +1,73 @@
+[workspace]
+members = [".", "guest"]
+resolver = "2"
+
+[package]
+name = "zk-proving"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "zk-proving"
+path = "src/main.rs"
+
+[dependencies]
+# HTTP + gRPC
+axum = { version = "0.7", features = ["macros"] }
+tonic = { version = "0.12", features = ["tls"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["trace", "timeout", "cors"] }
+hyper = { version = "1", features = ["full"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# RISC Zero
+risc0-zkvm = { version = "1.0", features = ["prove"] }
+
+# Post-Quantum Cryptography (liboqs bindings)
+oqs = { version = "0.9", features = ["ml-dsa", "ml-kem"] }
+
+# Redis client
+redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bincode = "1"
+
+# Cryptography
+hmac = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+hex = "0.4"
+base64 = "0.22"
+uuid = { version = "1", features = ["v4"] }
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# Config
+config = "0.14"
+
+# Telemetry
+opentelemetry = "0.23"
+opentelemetry-otlp = { version = "0.16", features = ["grpc-tonic"] }
+opentelemetry_sdk = { version = "0.23", features = ["rt-tokio"] }
+tracing = "0.1"
+tracing-opentelemetry = "0.24"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# HTTP client for Supabase
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+
+[build-dependencies]
+risc0-build = "1.0"
+tonic-build = "0.12"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }

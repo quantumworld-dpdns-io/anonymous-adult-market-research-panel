@@ -1,0 +1,45 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: no-shell-execution-prod
+  namespace: default
+  annotations:
+    description: "SIGKILL any shell process spawned inside production containers"
+spec:
+  kprobes:
+    - call: "sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "In"
+              values:
+                - "/bin/sh"
+                - "/bin/bash"
+                - "/bin/dash"
+                - "/bin/zsh"
+                - "/usr/bin/sh"
+                - "/usr/bin/bash"
+                - "/usr/bin/zsh"
+                - "/usr/bin/python3"
+                - "/usr/bin/python"
+                - "/usr/bin/perl"
+          matchNamespaces:
+            - namespace: default
+          matchPods:
+            - operator: In
+              values:
+                - "api-gateway"
+                - "zk-proving"
+                - "analytics"
+                - "quantum"
+          matchActions:
+            - action: Sigkill
+          matchReturnArgs:
+            - index: 0
+              operator: "NotIn"
+              values:
+                - "0"

@@ -1,0 +1,20 @@
+# Prover.toml.example
+# Copy to Prover.toml and fill in values for local development/testing.
+# NEVER commit real birth dates. Use dummy values only.
+# These inputs satisfy the circuit for testing purposes.
+
+# Private inputs — known only to the prover (never sent to server)
+birth_year      = "2000"
+birth_month     = "1"
+birth_day       = "1"
+blinding_factor = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+
+# Public inputs — visible to the verifier
+current_year    = "2026"
+current_month   = "5"
+current_day     = "8"
+study_id        = "0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD"
+
+# nullifier = pedersen_hash([birth_year, birth_month, birth_day, blinding_factor, study_id])
+# Compute with: nargo execute (will auto-fill after nargo check populates Prover.toml)
+nullifier       = "0x0000000000000000000000000000000000000000000000000000000000000000"

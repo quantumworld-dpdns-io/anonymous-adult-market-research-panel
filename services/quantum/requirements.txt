@@ -1,0 +1,12 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+qiskit>=2.0.0
+qiskit-aer==0.15.0
+qiskit-ibm-runtime==0.29.0
+numpy>=1.26.0
+scipy>=1.13.0
+pydantic>=2.8.0
+pydantic-settings>=2.4.0
+opentelemetry-sdk==1.27.0
+opentelemetry-instrumentation-fastapi==0.48b0
+opentelemetry-exporter-otlp-proto-grpc==1.27.0
