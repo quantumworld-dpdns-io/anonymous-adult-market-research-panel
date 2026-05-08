@@ -227,19 +227,46 @@ Open [http://localhost:3000/participate](http://localhost:3000/participate) to s
 
 ### Implementation Plans (`docs/dev-docs/`)
 
-| Document | Coverage |
-|---|---|
-| `00-architecture-overview.md` | System design, service boundaries, data flows, threat model |
-| `01-zk-age-verification.md` | Noir circuit design, NoirJS browser proving, server verification |
-| `02-anonymous-credentials.md` | Credential issuance with RISC Zero, nullifier registry, unlinkability |
-| `03-frontend-nextjs.md` | Next.js app structure, participant portal, researcher dashboard |
-| `04-go-api-gateway.md` | Go service: routing, gRPC, PQC TLS, auth middleware |
-| `05-rust-zk-proving-service.md` | Rust RISC Zero host/guest, Axum API, Noir verifier integration |
-| `06-python-analytics-service.md` | Federated learning with Flower, differential privacy, result aggregation |
-| `07-quantum-sampling-service.md` | Qiskit QASM circuits for panel randomization, CUDA-Q simulation |
-| `08-supabase-database-design.md` | Schema, RLS policies, Edge Functions, Realtime setup |
-| `09-security-pqc-runtime.md` | PQC migration, Tetragon policies, secrets management |
-| `10-federated-learning-design.md` | Flower federation topology, aggregation strategy, privacy accounting |
+| Document | Coverage | Status |
+|---|---|---|
+| `00-architecture-overview.md` | System design, service boundaries, data flows, threat model | Design doc |
+| `01-zk-age-verification.md` | Noir circuit design, NoirJS browser proving, server verification | Implemented |
+| `02-anonymous-credentials.md` | Credential issuance with RISC Zero, nullifier registry, unlinkability | Implemented |
+| `03-frontend-nextjs.md` | Next.js app structure, participant portal, researcher dashboard | Implemented |
+| `04-go-api-gateway.md` | Go service: routing, gRPC, PQC TLS, auth middleware | Implemented |
+| `05-rust-zk-proving-service.md` | Rust RISC Zero host/guest, Axum API, Noir verifier integration | Implemented |
+| `06-python-analytics-service.md` | Federated learning with Flower, differential privacy, result aggregation | Implemented |
+| `07-quantum-sampling-service.md` | Qiskit QASM circuits for panel randomization, CUDA-Q simulation | Implemented |
+| `08-supabase-database-design.md` | Schema, RLS policies, Edge Functions, Realtime setup | Implemented |
+| `09-security-pqc-runtime.md` | PQC migration, Tetragon policies, secrets management | Implemented |
+| `10-federated-learning-design.md` | Flower federation topology, aggregation strategy, privacy accounting | Implemented |
+| `PROGRESS.md` | Agent implementation log, follow-up items, boot instructions | Live tracker |
+
+---
+
+## Implementation Status
+
+> **171 files scaffolded across all services** — 2026-05-08, via 8 parallel implementation agents.
+
+| Service | Path | Files | Notes |
+|---|---|---|---|
+| Noir ZK Circuit | `circuits/age-proof/` | 5 | 9 nargo tests; `nargo compile` required before dev |
+| Rust ZK Proving Service | `services/zk-proving/` | 27 | Axum + Tonic + RISC Zero + ML-DSA-65; 3 follow-ups |
+| Next.js Frontend | `apps/web/` | 40 | App Router; ZK prove flow; researcher dashboard |
+| Go API Gateway | `services/api-gateway/` | 26 | CIRCL PQC TLS; gRPC; rate-limit; OTel |
+| Python Analytics + FL | `services/analytics/` | 22 | Flower DPFedAvg; Gaussian DP; DuckDB cache |
+| Python Quantum Sampling | `services/quantum/` | 19 | Qiskit Aer/IBM/CUDA-Q; chi-squared tests |
+| Supabase DB + Functions | `supabase/` | 13 | 7 migrations; 2 Edge Functions; column-level RLS |
+| Infra + Security | `infra/` + `.github/` | 19 | docker-compose; 5 Tetragon policies; 3 CI workflows |
+
+### Outstanding Follow-Ups Before First Boot
+
+1. **Copy circuit artifact**: `nargo compile` in `circuits/age-proof/`, then copy `target/age_proof.json` → `apps/web/circuits/` and `.vk` → `services/zk-proving/circuits/`
+2. **Generate gRPC stubs**: `cd services/api-gateway && make proto` (requires protoc + Go plugins)
+3. **Wire RISC Zero timestamp**: host-side `issued_at` injection into guest journal (`services/zk-proving/src/handlers/issue_credential.rs`)
+4. **Complete Axum+Tonic dual server**: finish TODO in `services/zk-proving/src/main.rs`
+
+See [`docs/dev-docs/PROGRESS.md`](docs/dev-docs/PROGRESS.md) for full agent logs and boot instructions.
 
 ---
 

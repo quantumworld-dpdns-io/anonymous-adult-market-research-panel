@@ -1,0 +1,15 @@
+[package]
+name = "credential-guest"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "credential-guest"
+path = "src/main.rs"
+
+[dependencies]
+risc0-zkvm = { version = "1.0", default-features = false, features = ["std"] }
+serde = { version = "1", features = ["derive"] }
+bincode = "1"
+sha2 = { version = "0.10", default-features = false, features = ["force-soft"] }
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
