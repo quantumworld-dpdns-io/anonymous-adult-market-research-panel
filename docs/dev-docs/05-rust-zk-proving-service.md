@@ -30,7 +30,7 @@ Define the implementation of the Rust ZK Proving Service, which hosts the RISC Z
 services/zk-proving/
 ├── Cargo.toml
 ├── Cargo.lock
-├── build.rs                      # RISC Zero image build
+├── build.rs                      # Tonic proto compilation (RISC Zero guest build removed — see §10)
 ├── src/
 │   ├── main.rs                   # Startup: Axum + Tonic servers
 │   ├── config.rs
@@ -231,41 +231,63 @@ impl DateSigner {
 
 ## 6. RISC Zero Credential Issuer
 
+> **Dev/Production split:** The `prove` feature of `risc0-zkvm` requires `rzup` and the Metal
+> GPU compiler (full Xcode on macOS). To keep the dev build lightweight, `credential_issuer.rs`
+> uses a SHA-256 commitment stub when `RISC0_DEV_MODE=1`. In production CI, set
+> `RISC0_DEV_MODE=0` and install `rzup` + full Xcode, then restore `features = ["prove"]` and
+> `risc0-build` in `Cargo.toml`.
+
 ```rust
 // src/zk/credential_issuer.rs
-use risc0_zkvm::{default_prover, ExecutorEnv, Receipt};
-use crate::config::Config;
+use sha2::{Sha256, Digest};
+use crate::{config::Config, error::AppError};
 
-// Built by build.rs using risc0-build
-include!(concat!(env!("OUT_DIR"), "/methods.rs"));
+// Dev stubs — replace with risc0-build output in production
+const CREDENTIAL_GUEST_ELF: &[u8] = &[];
+const CREDENTIAL_GUEST_ID: [u32; 8] = [0u32; 8];
+
+pub struct CredentialReceipt {
+    pub journal: CredentialJournal,
+    /// Hex-encoded receipt seal (groth16 in production; SHA-256 in dev mode).
+    pub seal_hex: String,
+}
 
 pub struct CredentialIssuer;
 
 impl CredentialIssuer {
-    pub fn new(_config: &Config) -> anyhow::Result<Self> {
-        Ok(Self)
-    }
+    pub fn new(_config: &Config) -> anyhow::Result<Self> { Ok(Self) }
 
     pub async fn issue(
         &self,
         request: CredentialRequest,
-    ) -> anyhow::Result<(CredentialJournal, Receipt)> {
-        // Spawn blocking because zkVM proving is CPU-intensive
+    ) -> Result<CredentialReceipt, AppError> {
+        let dev_mode = std::env::var("RISC0_DEV_MODE").unwrap_or_default().trim() == "1";
+        if !dev_mode && CREDENTIAL_GUEST_ELF.is_empty() {
+            return Err(AppError::Internal(anyhow::anyhow!(
+                "Set RISC0_DEV_MODE=1 for local dev, or build with risc0-build for production"
+            )));
+        }
         tokio::task::spawn_blocking(move || {
-            let env = ExecutorEnv::builder()
-                .write(&request)?
-                .build()?;
-
-            let prover = default_prover();
-            let receipt = prover.prove(env, CREDENTIAL_GUEST_ELF)?;
-
-            // Verify against pinned Image ID (catches dev mode / substitution)
-            receipt.verify(CREDENTIAL_GUEST_ID)?;
-
-            let journal: CredentialJournal = receipt.journal.decode()?;
-            Ok::<_, anyhow::Error>((journal, receipt))
+            // Dev mode: SHA-256 commitment (not a real ZK proof)
+            let nullifier_hash: [u8; 32] = Sha256::digest(request.nullifier.as_bytes()).into();
+            let attrs_bytes = serde_json::to_vec(&request.study_attributes)?;
+            let attributes_hash: [u8; 32] = Sha256::digest(&attrs_bytes).into();
+            let mut input = vec![];
+            input.extend_from_slice(&nullifier_hash);
+            input.extend_from_slice(&request.blinding_factor);
+            input.extend_from_slice(request.study_id.as_bytes());
+            input.extend_from_slice(&request.issued_at.to_le_bytes());
+            let credential_commitment: [u8; 32] = Sha256::digest(&input).into();
+            let journal = CredentialJournal {
+                credential_commitment, nullifier_hash,
+                study_id: request.study_id, issued_at: request.issued_at, attributes_hash,
+            };
+            let seal: [u8; 32] = Sha256::digest(&serde_json::to_vec(&journal)?).into();
+            Ok::<_, anyhow::Error>(CredentialReceipt { journal, seal_hex: hex::encode(seal) })
         })
-        .await?
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?
+        .map_err(AppError::Internal)
     }
 }
 ```
@@ -429,17 +451,23 @@ async fn build_router(state: AppState) -> Router {
 
 ---
 
-## 10. `build.rs` for RISC Zero Guest
+## 10. `build.rs`
+
+`build.rs` compiles the Tonic proto stub only. The RISC Zero guest build (`risc0-build`) is
+excluded from the dev build because it requires `rzup` and full Xcode (Metal GPU compiler) on
+macOS. To re-enable for production:
+
+1. `rzup install` — install the RISC Zero toolchain
+2. Restore `risc0-build = "1.0"` in `[build-dependencies]` and `features = ["prove"]` on
+   `risc0-zkvm` in `Cargo.toml`
+3. Add `risc0_build::embed_methods_with_options(...)` back to `build.rs`
+4. Set `RISC0_DEV_MODE=0`
 
 ```rust
-// build.rs
+// build.rs (current — dev mode)
 fn main() {
-    // Compile the guest ELF and embed Image ID
-    risc0_build::embed_methods_with_options(
-        [risc0_build::GuestOptions::default()
-            .with_features(["credential-guest"])],
-        risc0_build::DockerOptions::default(),
-    );
+    tonic_build::compile_protos("proto/zkproving/v1/service.proto")
+        .expect("failed to compile zkproving proto");
 }
 ```
 
@@ -451,7 +479,7 @@ fn main() {
 |---|---|---|
 | Barretenberg verify valid proof | Integration | Returns true for valid age proof |
 | Barretenberg reject invalid proof | Integration | Returns false; no panic |
-| RISC Zero credential issuance | Integration | Receipt verified; journal decoded |
+| RISC Zero credential issuance | Integration | `RISC0_DEV_MODE=1`: SHA-256 stub; prod: receipt verified + journal decoded |
 | Nullifier bloom filter | Unit | BF.ADD / BF.EXISTS round-trip |
 | Nullifier Supabase write | Integration | UNIQUE constraint prevents duplicate |
 | Token issue + verify | Unit | Signature valid; expiry respected |

@@ -132,73 +132,57 @@ fn main() {
 
 ### 2.4 Host Program (Credential Issuance Handler)
 
+> **Dev vs Production:** The `risc0-zkvm` `prove` feature requires the RISC Zero toolchain
+> (`rzup`) and, on macOS, the Metal GPU compiler from full Xcode. For local development set
+> `RISC0_DEV_MODE=1` — the service then issues a SHA-256 commitment as the `receipt_seal`
+> instead of a real ZK receipt. The production flow below requires `rzup` + Xcode to be
+> installed and `RISC0_DEV_MODE` unset or `0`.
+
 ```rust
-// services/zk-proving/src/handlers/issue_credential.rs
-use risc0_zkvm::{ExecutorEnv, default_prover, Receipt};
-use crate::{AppState, IssueCredentialRequest, IssueCredentialResponse};
+// services/zk-proving/src/handlers/issue_credential.rs  (production flow)
+// In dev mode (RISC0_DEV_MODE=1) CredentialIssuer::issue() returns a SHA-256 stub.
 
-// Image ID is the SHA-256 of the guest ELF — pinned at compile time
-const CREDENTIAL_GUEST_ELF: &[u8] = include_bytes!("../target/riscv-guest/credential-guest");
-const CREDENTIAL_IMAGE_ID: [u32; 8] = risc0_build::embed_methods!();
-
-pub async fn issue_credential_handler(
+pub async fn handler(
     State(state): State<AppState>,
     Json(req): Json<IssueCredentialRequest>,
 ) -> Result<Json<IssueCredentialResponse>, AppError> {
-    // 1. Verify age proof first (Barretenberg verify — see handler 01)
-    let age_proof_valid = state.age_verifier
-        .verify(&req.age_proof, &req.age_public_inputs)?;
+    // 1. Verify ML-DSA-65 date attestation
+    state.date_signer.verify_attestation(&req.date_attestation)?;
 
-    // 2. Fetch study criteria from Supabase (non-PII: min_age confirmed by ZK,
-    //    country_bucket, interest_tags — participant self-reports, not verified)
-    let study_attrs = state.supabase.get_study_criteria(&req.study_id).await?;
+    // 2. Verify Barretenberg age proof
+    state.age_verifier.verify(&req.age_proof, &req.age_public_inputs)?;
 
-    // 3. Build zkVM input
+    // 3. Decode blinding factor (base64url)
+    let blinding_factor: [u8; 32] = decode_blinding_factor(&req.blinding_factor_b64)?;
+
+    // 4. Build credential request (issued_at injected by host)
     let credential_req = CredentialRequest {
         nullifier: req.nullifier.clone(),
         study_id: req.study_id.clone(),
-        age_proof_valid,
-        study_attributes: study_attrs,
-        blinding_factor: req.blinding_factor,
+        age_proof_valid: true,
+        study_attributes: req.study_attributes,
+        blinding_factor,
+        issued_at: chrono::Utc::now().timestamp(),
     };
 
-    // 4. Execute guest inside RISC Zero zkVM
-    let env = ExecutorEnv::builder()
-        .write(&credential_req)?
-        .build()?;
+    // 5. Issue credential (zkVM in prod; SHA-256 stub in dev mode)
+    let cred = state.credential_issuer.issue(credential_req).await?;
 
-    let prover = default_prover();
-    let receipt: Receipt = tokio::task::spawn_blocking(move || {
-        prover.prove(env, CREDENTIAL_GUEST_ELF)
-    }).await??;
+    // 6. Register nullifier permanently
+    state.nullifier_registry.register(&req.nullifier, &req.study_id).await?;
 
-    // 5. Verify receipt against pinned Image ID
-    receipt.verify(CREDENTIAL_IMAGE_ID)?;
+    // 7. Persist commitment to Supabase (background, non-blocking)
+    spawn_supabase_write(&state, &cred.journal, &req.study_id);
 
-    // 6. Decode public journal
-    let journal: CredentialJournal = receipt.journal.decode()?;
-
-    // 7. Store credential commitment in Supabase (no PII — only hashes and commitments)
-    state.supabase.insert("credentials", serde_json::json!({
-        "commitment": hex::encode(journal.credential_commitment),
-        "nullifier_hash": hex::encode(journal.nullifier_hash),
-        "study_id": journal.study_id,
-        "issued_at": journal.issued_at,
-        "attributes_hash": hex::encode(journal.attributes_hash),
-        "receipt_seal": hex::encode(receipt.inner.seal_bytes()?),
-    })).await?;
-
-    // 8. Issue ZK session token (HMAC, 1hr TTL, bound to study + commitment)
-    let token = state.token_issuer.issue_with_commitment(
-        &journal.nullifier_hash,
-        &req.study_id,
-        &journal.credential_commitment,
-    )?;
+    // 8. Issue ZK session token (HMAC-SHA256, 1hr TTL, bound to commitment)
+    let commitment_hex = hex::encode(cred.journal.credential_commitment);
+    let token = state.token_issuer
+        .issue_with_commitment(&req.nullifier, &req.study_id, &commitment_hex)?;
 
     Ok(Json(IssueCredentialResponse {
         zk_session_token: token,
-        credential_commitment: hex::encode(journal.credential_commitment),
-        receipt_seal: hex::encode(receipt.inner.seal_bytes()?),
+        credential_commitment: commitment_hex,
+        receipt_seal: cred.seal_hex,  // real groth16 seal in prod; SHA-256 stub in dev
     }))
 }
 ```

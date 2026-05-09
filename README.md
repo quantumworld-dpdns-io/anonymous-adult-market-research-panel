@@ -161,18 +161,24 @@ git clone https://github.com/quantumworld-dpdns-io/anonymous-adult-market-resear
 cd anonymous-adult-market-research-panel
 
 # Install language toolchains
-noirup                          # Noir/Nargo (ZK circuits)
-cargo install cargo-risczero    # RISC Zero zkVM
+noirup                          # Noir/Nargo (ZK circuits) — installs nargo
+brew install cmake              # Required by oqs-sys (liboqs C library)
 # Go 1.23+, Python 3.12+, Node.js 22+ required
+
+# RISC Zero proving (optional for local dev — skip if using RISC0_DEV_MODE=1)
+#   curl -L https://risczero.com/install | bash && rzup install
+#   On macOS: also requires full Xcode (Metal GPU compiler), not just Command Line Tools
 
 # Copy and configure environment variables
 cp .env.example .env.local
-# Fill in: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
-# Fill in: RISC_ZERO_API_KEY (for remote proving), OPENAI_API_KEY or ANTHROPIC_API_KEY
+# Required: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
+# Required: ZK_TOKEN_SECRET (32+ random bytes), SERVICE_HMAC_SECRET
+# Optional: RISC_ZERO_API_KEY (for remote proving), AWS_REGION (for Secrets Manager)
+export RISC0_DEV_MODE=1         # Use SHA-256 stub instead of real zkVM (local dev only)
 
 # Start the full dev stack
 docker compose up -d            # Supabase local, Redis, Qdrant, Tetragon
-cd services/api-gateway && go run . &
+cd services/api-gateway && go run ./cmd/gateway &
 cd services/zk-proving && cargo run &
 cd services/analytics && uvicorn main:app --reload &
 cd apps/web && npm install && npm run dev
@@ -251,7 +257,7 @@ Open [http://localhost:3000/participate](http://localhost:3000/participate) to s
 | Service | Path | Files | Notes |
 |---|---|---|---|
 | Noir ZK Circuit | `circuits/age-proof/` | 6 | 13 nargo tests — all passing; artifacts compiled |
-| Rust ZK Proving Service | `services/zk-proving/` | 27 | Axum + Tonic dual-server live; `issued_at` wired; RISC Zero + ML-DSA-65 |
+| Rust ZK Proving Service | `services/zk-proving/` | 27 | Axum + Tonic dual-server live; ML-DSA-65; dev: `RISC0_DEV_MODE=1` stub; prod: rzup + Xcode |
 | Next.js Frontend | `apps/web/` | 41 | App Router; ZK prove flow; `circuits/age_proof.json` present |
 | Go API Gateway | `services/api-gateway/` | 26 | gRPC stubs regenerated; CIRCL PQC TLS; rate-limit; OTel |
 | Python Analytics + FL | `services/analytics/` | 22 | Flower DPFedAvg; Gaussian DP; DuckDB cache |
