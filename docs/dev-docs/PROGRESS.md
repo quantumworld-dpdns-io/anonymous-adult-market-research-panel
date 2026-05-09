@@ -1,6 +1,6 @@
 # Implementation Progress
 
-_Last updated: 2026-05-08 — all 8 implementation agents completed._
+_Last updated: 2026-05-09 — all 8 implementation agents + 4 follow-up agents completed._
 
 ---
 
@@ -8,10 +8,78 @@ _Last updated: 2026-05-08 — all 8 implementation agents completed._
 
 | Metric | Value |
 |---|---|
-| Total files created | **171** |
-| Implementation agents | **8** (ran in parallel) |
+| Total files created | **174** |
+| Implementation agents | **8** (phase 1, ran in parallel) + **4** (phase 2 follow-ups) |
 | Plans implemented | **11 of 11** (plans 00–10) |
-| Outstanding follow-up items | **6** (see below) |
+| Outstanding follow-up items | **0** — all pre-boot tasks done |
+
+---
+
+## Phase 2 — Follow-Up Agents (2026-05-09)
+
+### FU-1 — Noir Circuit Compile + Artifact Copy
+**Status: COMPLETE**
+
+| Step | Result |
+|---|---|
+| `nargo check` | Pass |
+| `nargo test` (13 tests) | 13/13 pass |
+| `nargo compile` | `target/age_proof.json` generated |
+| Copy JSON artifact | `apps/web/circuits/age_proof.json` |
+| Copy JSON artifact | `services/zk-proving/circuits/age_proof.json` |
+| `.vk` (verification key) | Requires `bb` (Barretenberg CLI) — not yet installed. Run `bbup` to install, then `bb write_vk -b target/age_proof.json -o target/age_proof.vk` |
+
+**Test cases added:** `src/tests.nr` (13 tests in `src/` so nargo discovers them):
+- 4 `compute_age` unit tests (birthday past/future/today/exact-18)
+- 2 happy-path full-circuit tests (age 26, exact 18)
+- 7 `should_fail` tests (minor-16, minor-17-boundary, wrong nullifier, wrong study_id, invalid month 0, invalid month 13, invalid day 0)
+
+**Deviations from plan:**
+- Original tests were in `tests/test_age.nr` — nargo does not discover tests outside `src/`. Moved to `src/tests.nr` + added `mod tests;` to `main.nr`.
+- `.vk` not generated (requires `bb` binary). JSON artifact copied to both consumers instead.
+
+---
+
+### FU-2 — gRPC Stub Generation
+**Status: COMPLETE**
+
+| Step | Result |
+|---|---|
+| `protoc-gen-go-grpc` install | `go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest` — binary at `~/go/bin/` |
+| `make proto` | Success — no errors |
+| `service.pb.go` | Regenerated (21 820 bytes) |
+| `service_grpc.pb.go` | Regenerated (8 259 bytes, 197 lines) |
+
+**Deviations from plan:** None. `protoc` was already installed via Homebrew. `Makefile` already had correct `--go-grpc_out` flags; only the missing plugin binary was the blocker.
+
+---
+
+### FU-3 — RISC Zero Host Timestamp Injection
+**Status: COMPLETE**
+
+| File | Change |
+|---|---|
+| `services/zk-proving/guest/src/main.rs` | Added `issued_at: i64` field to `CredentialRequest`; reads `req.issued_at` instead of hardcoded `0i64` |
+| `services/zk-proving/src/handlers/issue_credential.rs` | Added `issued_at: chrono::Utc::now().timestamp()` in `CredentialRequest` struct literal |
+
+The host now injects a Unix-second timestamp at proof time; the guest commits it to the RISC Zero journal for verifiable binding.
+
+---
+
+### FU-4 — Axum + Tonic Dual-Server
+**Status: COMPLETE**
+
+`services/zk-proving/src/main.rs` now runs both servers concurrently:
+
+```rust
+tokio::try_join!(http_server, grpc_server)?;
+```
+
+- HTTP (Axum) binds on `0.0.0.0:3001`
+- gRPC (Tonic) binds on `0.0.0.0:50051`
+- Either failure triggers clean shutdown of the process
+
+**Deviations from plan:** `build.rs` Tonic compile step was already present from phase-1 scaffolding. Only the `main.rs` server startup was incomplete.
 
 ---
 
