@@ -246,25 +246,27 @@ Open [http://localhost:3000/participate](http://localhost:3000/participate) to s
 
 ## Implementation Status
 
-> **171 files scaffolded across all services** — 2026-05-08, via 8 parallel implementation agents.
+> **174 files scaffolded across all services** — 2026-05-09, via 8 parallel implementation agents + 4 follow-up agents.
 
 | Service | Path | Files | Notes |
 |---|---|---|---|
-| Noir ZK Circuit | `circuits/age-proof/` | 5 | 9 nargo tests; `nargo compile` required before dev |
-| Rust ZK Proving Service | `services/zk-proving/` | 27 | Axum + Tonic + RISC Zero + ML-DSA-65; 3 follow-ups |
-| Next.js Frontend | `apps/web/` | 40 | App Router; ZK prove flow; researcher dashboard |
-| Go API Gateway | `services/api-gateway/` | 26 | CIRCL PQC TLS; gRPC; rate-limit; OTel |
+| Noir ZK Circuit | `circuits/age-proof/` | 6 | 13 nargo tests — all passing; artifacts compiled |
+| Rust ZK Proving Service | `services/zk-proving/` | 27 | Axum + Tonic dual-server live; `issued_at` wired; RISC Zero + ML-DSA-65 |
+| Next.js Frontend | `apps/web/` | 41 | App Router; ZK prove flow; `circuits/age_proof.json` present |
+| Go API Gateway | `services/api-gateway/` | 26 | gRPC stubs regenerated; CIRCL PQC TLS; rate-limit; OTel |
 | Python Analytics + FL | `services/analytics/` | 22 | Flower DPFedAvg; Gaussian DP; DuckDB cache |
 | Python Quantum Sampling | `services/quantum/` | 19 | Qiskit Aer/IBM/CUDA-Q; chi-squared tests |
 | Supabase DB + Functions | `supabase/` | 13 | 7 migrations; 2 Edge Functions; column-level RLS |
 | Infra + Security | `infra/` + `.github/` | 19 | docker-compose; 5 Tetragon policies; 3 CI workflows |
 
-### Outstanding Follow-Ups Before First Boot
+### Pre-Boot Follow-Ups — All Complete
 
-1. **Copy circuit artifact**: `nargo compile` in `circuits/age-proof/`, then copy `target/age_proof.json` → `apps/web/circuits/` and `.vk` → `services/zk-proving/circuits/`
-2. **Generate gRPC stubs**: `cd services/api-gateway && make proto` (requires protoc + Go plugins)
-3. **Wire RISC Zero timestamp**: host-side `issued_at` injection into guest journal (`services/zk-proving/src/handlers/issue_credential.rs`)
-4. **Complete Axum+Tonic dual server**: finish TODO in `services/zk-proving/src/main.rs`
+| # | Task | Status | Notes |
+|---|---|---|---|
+| FU-1 | Compile Noir circuit + copy artifacts | **Done** | 13/13 tests pass; `age_proof.json` in `apps/web/circuits/` and `services/zk-proving/circuits/`; `.vk` requires `bb` (Barretenberg CLI) — install with `bbup` when proving locally |
+| FU-2 | `make proto` — gRPC stub generation | **Done** | `protoc-gen-go-grpc` installed; `service.pb.go` + `service_grpc.pb.go` regenerated (197 lines) |
+| FU-3 | Wire `issued_at` into RISC Zero guest journal | **Done** | `CredentialRequest.issued_at: i64` in guest; `chrono::Utc::now().timestamp()` injected in host handler |
+| FU-4 | Complete Axum + Tonic dual-server startup | **Done** | `tokio::try_join!(http_server, grpc_server)` in `services/zk-proving/src/main.rs` |
 
 See [`docs/dev-docs/PROGRESS.md`](docs/dev-docs/PROGRESS.md) for full agent logs and boot instructions.
 
