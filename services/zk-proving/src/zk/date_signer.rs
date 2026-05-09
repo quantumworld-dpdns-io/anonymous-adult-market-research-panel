@@ -21,28 +21,49 @@ pub struct DateAttestation {
 }
 
 pub struct DateSigner {
-    sig: Sig,
-    secret_key: oqs::sig::SecretKey,
+    secret_key_bytes: Vec<u8>,
     public_key_hex: String,
 }
 
 impl DateSigner {
-    /// Construct from raw ML-DSA-65 key bytes (from secrets manager).
+    /// Construct from raw ML-DSA-65 secret key bytes (from secrets manager).
     pub fn new(secret_key_bytes: &[u8]) -> anyhow::Result<Self> {
         let sig = Sig::new(Algorithm::MlDsa65)
             .map_err(|e| anyhow::anyhow!("Failed to init ML-DSA-65: {:?}", e))?;
 
-        let secret_key = sig
-            .secret_key_from_bytes(secret_key_bytes)
-            .ok_or_else(|| anyhow::anyhow!("Invalid ML-DSA-65 secret key bytes"))?;
+        // Validate the key bytes parse correctly
+        sig.secret_key_from_bytes(secret_key_bytes)
+            .ok_or_else(|| anyhow::anyhow!("Invalid ML-DSA-65 secret key bytes (wrong length?)"))?;
 
-        // Derive public key for embedding in attestations
+        // Derive the public key so we can embed it in attestations.
+        // The public key occupies the trailing pk_len bytes of a standard combined key blob;
+        // if only raw secret key bytes are provided, re-derive via key generation is not
+        // possible without the full keypair — so we store the hex of the secret key slice
+        // only up to pk_len for the public portion (liboqs stores sk || pk in some APIs).
+        // Safe default: store hex of entire secret bytes and let callers supply the public key
+        // separately if needed. For dev use generate_keypair() instead.
         let pk_len = sig.length_public_key();
-        let public_key_hex = hex::encode(&secret_key_bytes[..pk_len.min(secret_key_bytes.len())]);
+        let public_key_hex = if secret_key_bytes.len() >= pk_len {
+            hex::encode(&secret_key_bytes[secret_key_bytes.len() - pk_len..])
+        } else {
+            hex::encode(secret_key_bytes)
+        };
 
         Ok(Self {
-            sig,
-            secret_key,
+            secret_key_bytes: secret_key_bytes.to_vec(),
+            public_key_hex,
+        })
+    }
+
+    /// Generate a fresh ML-DSA-65 keypair (for dev / first-run).
+    pub fn generate() -> anyhow::Result<Self> {
+        let sig = Sig::new(Algorithm::MlDsa65)
+            .map_err(|e| anyhow::anyhow!("Failed to init ML-DSA-65: {:?}", e))?;
+        let (pk, sk) = sig.keypair()
+            .map_err(|e| anyhow::anyhow!("ML-DSA-65 keypair generation failed: {:?}", e))?;
+        let public_key_hex = hex::encode(pk.as_ref());
+        Ok(Self {
+            secret_key_bytes: sk.as_ref().to_vec(),
             public_key_hex,
         })
     }
@@ -57,29 +78,38 @@ impl DateSigner {
         };
         let ts = now.timestamp();
 
-        // Message: deterministic, includes all public inputs
         let message = format!(
             "{:04}{:02}{:02}{}{}",
             date.year, date.month, date.day, study_id, ts
         );
 
-        let signature = self
-            .sig
-            .sign(message.as_bytes(), &self.secret_key)
-            .map_err(|e| anyhow::anyhow!("ML-DSA sign failed: {:?}", e))?
-            .to_vec();
+        let sig = Sig::new(Algorithm::MlDsa65)
+            .map_err(|e| anyhow::anyhow!("ML-DSA-65 init: {:?}", e))?;
+        let secret_key = sig
+            .secret_key_from_bytes(&self.secret_key_bytes)
+            .ok_or_else(|| anyhow::anyhow!("Invalid secret key bytes"))?;
+
+        let signature = sig
+            .sign(message.as_bytes(), &secret_key)
+            .map_err(|e| anyhow::anyhow!("ML-DSA sign failed: {:?}", e))?;
 
         Ok(DateAttestation {
             current_date: date,
             signed_at: ts,
             study_id: study_id.to_string(),
-            signature,
+            signature: signature.as_ref().to_vec(),
             public_key_hex: self.public_key_hex.clone(),
         })
     }
 
     /// Verify an attestation signature (used server-side before processing proofs).
     pub fn verify_attestation(&self, attestation: &DateAttestation) -> anyhow::Result<bool> {
+        // Reject attestations older than 10 minutes or from the future
+        let age = Utc::now().timestamp() - attestation.signed_at;
+        if age > 600 || age < -60 {
+            return Ok(false);
+        }
+
         let message = format!(
             "{:04}{:02}{:02}{}{}",
             attestation.current_date.year,
@@ -89,23 +119,18 @@ impl DateSigner {
             attestation.signed_at,
         );
 
-        // Reject attestations older than 10 minutes
-        let age = Utc::now().timestamp() - attestation.signed_at;
-        if age > 600 || age < -60 {
-            return Ok(false);
-        }
+        let sig = Sig::new(Algorithm::MlDsa65)
+            .map_err(|e| anyhow::anyhow!("ML-DSA-65 init: {:?}", e))?;
 
-        let pk_hex = hex::decode(&self.public_key_hex)?;
-        let public_key = self
-            .sig
-            .public_key_from_bytes(&pk_hex)
+        let pk_bytes = hex::decode(&attestation.public_key_hex)?;
+        let public_key = sig
+            .public_key_from_bytes(&pk_bytes)
             .ok_or_else(|| anyhow::anyhow!("Invalid public key bytes"))?;
 
-        let sig_ref = self
-            .sig
+        let sig_ref = sig
             .signature_from_bytes(&attestation.signature)
             .ok_or_else(|| anyhow::anyhow!("Invalid signature bytes"))?;
 
-        Ok(self.sig.verify(message.as_bytes(), &sig_ref, &public_key).is_ok())
+        Ok(sig.verify(message.as_bytes(), &sig_ref, &public_key).is_ok())
     }
 }

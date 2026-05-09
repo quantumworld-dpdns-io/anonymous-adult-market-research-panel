@@ -27,7 +27,7 @@ pub struct CredentialRequest {
     pub issued_at: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CredentialJournal {
     pub credential_commitment: [u8; 32],
     pub nullifier_hash: [u8; 32],
