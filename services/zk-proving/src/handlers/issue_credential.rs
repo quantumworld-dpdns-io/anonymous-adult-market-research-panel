@@ -72,7 +72,7 @@ pub async fn handler(
         issued_at: chrono::Utc::now().timestamp(),
     };
 
-    let (journal, receipt) = state.credential_issuer.issue(credential_req).await?;
+    let cred = state.credential_issuer.issue(credential_req).await?;
 
     // 5. Register nullifier permanently
     state
@@ -85,9 +85,9 @@ pub async fn handler(
     {
         let supabase_url = state.config.supabase_url.clone();
         let supabase_key = state.config.supabase_service_key.clone();
-        let commitment_hex = hex::encode(journal.credential_commitment);
-        let nullifier_hash_hex = hex::encode(journal.nullifier_hash);
-        let attributes_hash_hex = hex::encode(journal.attributes_hash);
+        let commitment_hex = hex::encode(cred.journal.credential_commitment);
+        let nullifier_hash_hex = hex::encode(cred.journal.nullifier_hash);
+        let attributes_hash_hex = hex::encode(cred.journal.attributes_hash);
         let study_id = req.study_id.clone();
         tokio::spawn(async move {
             let client = reqwest::Client::new();
@@ -109,19 +109,16 @@ pub async fn handler(
     }
 
     // 7. Issue ZK session token bound to commitment
-    let commitment_hex = hex::encode(journal.credential_commitment);
+    let commitment_hex = hex::encode(cred.journal.credential_commitment);
     let token = state
         .token_issuer
         .issue_with_commitment(&req.nullifier, &req.study_id, &commitment_hex)?;
 
-    // Seal bytes (opaque; stored for audit)
-    let seal_hex = ""; // Receipt seal serialization depends on risc0-zkvm API version
-
-    tracing::info!(study_id = %req.study_id, "Credential issued via RISC Zero");
+    tracing::info!(study_id = %req.study_id, "Credential issued");
 
     Ok(Json(IssueCredentialResponse {
         zk_session_token: token,
         credential_commitment: commitment_hex,
-        receipt_seal: seal_hex.to_string(),
+        receipt_seal: cred.seal_hex,
     }))
 }

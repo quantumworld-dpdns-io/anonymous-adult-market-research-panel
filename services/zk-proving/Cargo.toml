@@ -15,6 +15,7 @@ path = "src/main.rs"
 # HTTP + gRPC
 axum = { version = "0.7", features = ["macros"] }
 tonic = { version = "0.12", features = ["tls"] }
+prost = "0.13"
 tower = "0.4"
 tower-http = { version = "0.5", features = ["trace", "timeout", "cors"] }
 hyper = { version = "1", features = ["full"] }
@@ -22,8 +23,9 @@ hyper = { version = "1", features = ["full"] }
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
-# RISC Zero — "prove" enables default_prover(); set RISC0_DEV_MODE=1 locally
-risc0-zkvm = { version = "1.0", features = ["prove"] }
+# RISC Zero — "std" only; proving requires rzup + full Xcode (Metal) on macOS.
+# In production CI the "prove" feature is added via rzup-installed toolchain.
+risc0-zkvm = { version = "1.0", features = ["std"] }
 
 # Post-Quantum Cryptography (liboqs bindings)
 oqs = { version = "0.11", default-features = false, features = ["ml_dsa", "ml_kem"] }
