@@ -22,11 +22,11 @@ hyper = { version = "1", features = ["full"] }
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
-# RISC Zero (std only — omit "prove" to avoid requiring rzup in dev)
-risc0-zkvm = { version = "1.0", features = ["std"] }
+# RISC Zero — "prove" enables default_prover(); set RISC0_DEV_MODE=1 locally
+risc0-zkvm = { version = "1.0", features = ["prove"] }
 
 # Post-Quantum Cryptography (liboqs bindings)
-oqs = { version = "0.11", features = ["ml_dsa", "ml_kem"] }
+oqs = { version = "0.11", default-features = false, features = ["ml_dsa", "ml_kem"] }
 
 # Redis client
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
