@@ -24,3 +24,4 @@ vendor/
 !.env.example
 /.ignore
 /apps/web/.next
+/services/zk-proving/target/debug
