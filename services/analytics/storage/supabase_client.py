@@ -79,9 +79,24 @@ async def get_shard_keys_for_study(study_id: str) -> list[bytes]:
         dev_key = b"\x00" * 32
         return [dev_key, dev_key, dev_key]
 
-    # Production: fetch from secrets manager by study_id
-    # Placeholder — replace with actual secrets manager call
-    raise NotImplementedError("Secrets manager integration required in production")
+    # Production: fetch per-study shard keys from AWS Secrets Manager.
+    # Secret name pattern: panel/study/{study_id}/shard-keys
+    # Secret value: JSON array of base64-encoded 32-byte keys, one per FL shard.
+    import boto3
+    import base64
+
+    secret_name = f"panel/study/{study_id}/shard-keys"
+    region = os.getenv("AWS_REGION", "us-east-1")
+    client_sm = boto3.client("secretsmanager", region_name=region)
+    try:
+        resp = client_sm.get_secret_value(SecretId=secret_name)
+        raw = resp.get("SecretString") or base64.b64decode(resp["SecretBinary"]).decode()
+        key_list: list[str] = json.loads(raw)
+        return [base64.b64decode(k) for k in key_list]
+    except client_sm.exceptions.ResourceNotFoundException:
+        raise ValueError(f"Shard keys not found in Secrets Manager for study {study_id}") from None
+    except Exception as exc:
+        raise RuntimeError(f"Failed to retrieve shard keys from Secrets Manager: {exc}") from exc
 
 
 async def get_active_studies_above_threshold(min_responses: int = 50) -> list[Any]:
