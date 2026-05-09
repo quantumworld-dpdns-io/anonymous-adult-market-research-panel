@@ -26,10 +26,9 @@ circuits/
     ├── Nargo.toml
     ├── src/
     │   ├── main.nr          # Entry point: age predicate
-    │   └── utils.nr         # Date arithmetic helpers
-    ├── Prover.toml          # Dev test inputs (DO NOT commit real values)
-    └── tests/
-        └── test_age.nr      # nargo test cases
+    │   ├── utils.nr         # Date arithmetic helpers
+    │   └── tests.nr         # 13 nargo test cases (must be in src/ for nargo to discover)
+    └── Prover.toml          # Dev test inputs (DO NOT commit real values)
 ```
 
 ### 2.2 Circuit: `src/main.nr`
@@ -101,36 +100,39 @@ fn compute_age(
 }
 ```
 
-### 2.3 Circuit: `tests/test_age.nr`
+### 2.3 Circuit: `src/tests.nr`
 
-```rust
-#[test]
-fn test_valid_adult() {
-    // Born 2000-01-01, current date 2026-05-08 → age = 26
-    main(2000, 1, 1, 0x1234, 2026, 5, 8, 0xABCD, expected_nullifier());
-}
+> **Note:** nargo only discovers `#[test]` functions inside `src/`. Tests must live in `src/tests.nr`
+> with `mod tests;` declared in `src/main.nr`. A `tests/` directory is **not** scanned.
 
-#[test(should_fail)]
-fn test_minor_rejected() {
-    // Born 2010-01-01, current date 2026-05-08 → age = 16 — must fail
-    main(2010, 1, 1, 0x1234, 2026, 5, 8, 0xABCD, 0);
-}
+13 tests pass as of compilation (2026-05-09):
 
-#[test(should_fail)]
-fn test_wrong_nullifier() {
-    // Correct age but wrong nullifier — must fail constraint check
-    main(2000, 1, 1, 0x1234, 2026, 5, 8, 0xABCD, 0xDEAD);
-}
+```
+[age_proof] 13 tests passed
+
+  tests::test_age_birthday_past_this_year     ok
+  tests::test_age_birthday_not_yet_this_year  ok
+  tests::test_age_birthday_exactly_today      ok
+  tests::test_age_exactly_18_today            ok
+  tests::test_valid_adult_age_26              ok
+  tests::test_valid_adult_exactly_18          ok
+  tests::test_minor_rejected_age_16           ok  (should_fail)
+  tests::test_minor_rejected_age_17_birthday_not_yet  ok  (should_fail)
+  tests::test_wrong_nullifier_rejected        ok  (should_fail)
+  tests::test_wrong_study_id_in_nullifier     ok  (should_fail)
+  tests::test_invalid_month_zero              ok  (should_fail)
+  tests::test_invalid_month_13               ok  (should_fail)
+  tests::test_invalid_day_zero               ok  (should_fail)
 ```
 
 ### 2.4 `Nargo.toml`
 
 ```toml
 [package]
-name = "age-proof"
+name = "age_proof"
 type = "bin"
 authors = ["quantumworld-dpdns-io"]
-compiler_version = ">=1.0.0-beta.20"
+compiler_version = ">=0.31.0"
 
 [dependencies]
 # No external deps; uses std only
