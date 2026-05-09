@@ -20,39 +20,64 @@ func ListPublicStudies(analytics *clients.AnalyticsClient) http.HandlerFunc {
 	}
 }
 
-func GetStudyQuestions() http.HandlerFunc {
+func GetStudyQuestions(sb *clients.SupabaseClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		studyID := chi.URLParam(r, "studyId")
-		_ = studyID
-		// Delegates to Supabase via internal Edge Function or direct query
-		// Placeholder: returns empty questions list
-		jsonOK(w, map[string]any{"study_id": studyID, "questions": []any{}})
+		questions, err := sb.GetStudyQuestions(r.Context(), studyID)
+		if err != nil {
+			jsonError(w, "failed to fetch questions", http.StatusServiceUnavailable)
+			return
+		}
+		jsonOK(w, map[string]any{"study_id": studyID, "questions": questions})
 	}
 }
 
-func CreateStudy() http.HandlerFunc {
+func CreateStudy(sb *clients.SupabaseClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			jsonError(w, "invalid body", http.StatusBadRequest)
 			return
 		}
-		// Forward to Supabase Edge Function / internal service
-		jsonOK(w, map[string]string{"status": "created"})
+		study, err := sb.CreateStudy(r.Context(), body)
+		if err != nil {
+			jsonError(w, "failed to create study", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(study)
 	}
 }
 
-func GetStudy() http.HandlerFunc {
+func GetStudy(sb *clients.SupabaseClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		studyID := chi.URLParam(r, "studyId")
-		jsonOK(w, map[string]string{"study_id": studyID})
+		study, err := sb.GetStudy(r.Context(), studyID)
+		if err != nil {
+			jsonError(w, "failed to fetch study", http.StatusServiceUnavailable)
+			return
+		}
+		if study == nil {
+			jsonError(w, "study not found", http.StatusNotFound)
+			return
+		}
+		jsonOK(w, study)
 	}
 }
 
-func UpdateStudy() http.HandlerFunc {
+func UpdateStudy(sb *clients.SupabaseClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		studyID := chi.URLParam(r, "studyId")
-		_ = studyID
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			jsonError(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		if err := sb.UpdateStudy(r.Context(), studyID, body); err != nil {
+			jsonError(w, "failed to update study", http.StatusInternalServerError)
+			return
+		}
 		jsonOK(w, map[string]string{"status": "updated"})
 	}
 }

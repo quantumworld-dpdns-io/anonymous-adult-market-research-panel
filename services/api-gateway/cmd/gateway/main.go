@@ -31,6 +31,7 @@ func main() {
 	zkClient := clients.NewZKProvingClient(cfg.ZKProvingAddr)
 	analyticsClient := clients.NewAnalyticsClient(cfg.AnalyticsAddr).WithHMACSecret(cfg.ServiceHMACSecret)
 	quantumClient := clients.NewQuantumClient(cfg.QuantumAddr)
+	supabaseClient := clients.NewSupabaseClient(cfg.SupabaseURL, cfg.SupabaseServiceKey)
 
 	supabaseVerifier := auth.NewSupabaseJWTVerifier(cfg.SupabaseJWTSecret)
 	zkVerifier := auth.NewZKTokenVerifier(cfg.ZKTokenSecret)
@@ -57,23 +58,23 @@ func main() {
 		r.Post("/zk/issue-credential", handlers.IssueCredential(zkClient))
 		r.Get("/zk/date-attestation", handlers.DateAttestation(zkClient))
 		r.Get("/studies", handlers.ListPublicStudies(analyticsClient))
-		r.Get("/studies/{studyId}/questions", handlers.GetStudyQuestions())
+		r.Get("/studies/{studyId}/questions", handlers.GetStudyQuestions(supabaseClient))
 	})
 
 	// Participant routes — ZK session token required, 5 req/min
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RateLimit(cfg.Redis, "participant", 5, time.Minute))
 		r.Use(middleware.AuthenticateZKToken(zkVerifier))
-		r.Post("/responses", handlers.SubmitResponse())
+		r.Post("/responses", handlers.SubmitResponse(supabaseClient))
 	})
 
 	// Researcher routes — Supabase JWT required, 60 req/min
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RateLimit(cfg.Redis, "researcher", 60, time.Minute))
 		r.Use(middleware.AuthenticateResearcher(supabaseVerifier))
-		r.Post("/studies", handlers.CreateStudy())
-		r.Get("/studies/{studyId}", handlers.GetStudy())
-		r.Put("/studies/{studyId}", handlers.UpdateStudy())
+		r.Post("/studies", handlers.CreateStudy(supabaseClient))
+		r.Get("/studies/{studyId}", handlers.GetStudy(supabaseClient))
+		r.Put("/studies/{studyId}", handlers.UpdateStudy(supabaseClient))
 		r.Get("/analytics/{studyId}/results", handlers.GetResults(analyticsClient))
 		r.Post("/quantum/sample", handlers.QuantumSample(quantumClient))
 	})
